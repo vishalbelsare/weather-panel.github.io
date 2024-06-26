@@ -6,13 +6,17 @@
 Objectives:
 - Understand what geographical unit and administrative unit data are
 - Understand shapefiles, how to obtain them and how to work with them
+- Understand how to incorporate weights into your data.
+- Understand how to match up gridded data with different grids.
 
 Decision points:
 - How to incorporate geographical and administrative units in your analysis?
 - How to generate weather measures that will correspond to your economic data and geographical regions?
+- Does your data-generating process occur locally or regionally?
+- Select the weighting scheme most appropriate for your data.
 ```
 
-Socioeconomic data is collected and corresponding to geographical units, such as states, countries, provinces, or municipalities, which is a portion of a country delineated for administration, and hence, often called  "administrative units". For that reason, administrative units (or politically-defined regions) are frequently used in economic analysis rather than regular grids. Communicating data analysis results in administrative units is also particularly effective since politically defined regions are relevant for policy-makers. 
+Socioeconomic data is collected corresponding to geographical units, such as states, countries, provinces, or municipalities, which is a portion of a country delineated for administration, and hence, often called  "administrative units". For that reason, administrative units (or politically-defined regions) are frequently used in economic analysis rather than regular grids. Communicating data analysis results in administrative units is also particularly effective since politically defined regions are relevant for policy-makers. 
 
 The top-level of this hierarchy of administrative units is **ADM0**, referring to countries; **ADM1** is the first level of political division, usually called states or provinces; **ADM2** is the second level of division, and has a wider range of names across the globe (see example below).
  
@@ -50,7 +54,7 @@ Administrative unit data can capture existing administrative units (high granula
 When aggregating administrative units, it is important to capture territories with homogeneous features that are relevant to the study. For example, if the weather is relevant for the study, the administrative units should be fairly homogeneous concerning mean temperature and precipitation.
  
 ```{seealso}
-[Using Weather Data and Climate Model Output in Economic Analyses of Climate Change](https://academic.oup.com/reep/article/7/2/181/1522753) describes the common pitfalls in translating weather data into geographical unit data.
+[Using Weather Data and Climate Model Output in Economic Analyses of Climate Change](https://doi.org/10.1093/reep/ret016) describes the common pitfalls in translating weather data into geographical unit data.
 ```
  
 ## Geographic information systems (GIS)
@@ -71,7 +75,7 @@ It is usually possible to find online a shapefile that corresponds to a set of s
 In some cases, you will need to create a shapefile from scratch. The most common way of doing this is by defining ("clicking out") the shape of each polygon in QGIS or ArcGIS, which can be done in the following steps:
  
 1. Find an image that shows the regions that you want to digitize and import it into QGIS or ArcGIS.
-2. Typically, published images will not report the projection that was used, but you will need to find a mapping between points in the image and latitude-longitude coordinates. Use the [GDAL Georeferencer](https://www.qgistutorials.com/en/docs/georeferencing_basics.html) to make this a point-and-click task.
+2. Typically, published images will not report the projection that was used, but you will need to find a mapping between points in the image and latitude-longitude coordinates. Use the [GDAL Georeferencer](https://www.qgistutorials.com/en/docs/3/georeferencing_basics.html) to make this a point-and-click task.
 3. Create new polygons by clicking around the edges of the polygon.
 
 
@@ -79,7 +83,8 @@ In some cases, you will need to create a shapefile from scratch. The most common
 
 Once you obtain your shapefiles, you should first view them in a software system like QGIS or ArcGIS to ensure everything is in order. Both R and Python support working with shapefiles and spatial data. See the following examples:
 
-````{tabbed} R
+`````{tab-set}
+````{tab-item} R
 To read shapefiles you could use a package like `maptools`, `rgdal`, `sf`, or `PBSmapping`.
  
 ```{code-block} R
@@ -93,7 +98,7 @@ shapefile <- importShapefile("/my_shapefile.shp")
 ```
 ````
  
-````{tabbed} Python
+````{tab-item} Python
  
 Shapefiles can be opened with Python packages in a few different ways:
  
@@ -116,6 +121,7 @@ shapefile = gpd.read_file("my_shapefile.shp")
 print(shapefile)
 ```
 ````
+`````
 
 ````{caution}
 Despite its name indicating a singular file, a shapefile is actually a collection of at least three basic files that need to be stored in the same directory to be used. The three mandatory files have filename extensions `.shp`, `.shx` and `.dbf`. There may be additional files like `.prj` with the shape file’s projection information. All files must have the same name, for example:

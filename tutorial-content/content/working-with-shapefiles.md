@@ -33,20 +33,22 @@ Below, we sketch out two approaches to generating this matrix, but a few comment
   about the order of the entries, and order the columns of $A$ the
   same way.
  
-````{tabbed} R
+`````{tab-set}
+````{tab-item} R
   In R, `as.vector` will convert from a matrix to a vector, with each
   *column* being listed in full before moving on to the next column.
 ````
-````{tabbed} Python
+````{tab-item} Python
  In python, `numpy.flatten` will convert a numpy matrix to a vector,
   with each *row* being listed in full before moving on to the next
   row.
 ````
-````{tabbed} Matlab
+````{tab-item} Matlab
   In Matlab, indexing the grid with `(:)` will convert from an array
   to a vector, with each *column* being listed in full before moving
   on to the next column.
 ````
+`````
 
 ## Approach 1. Using grid cell centers
  
@@ -55,19 +57,47 @@ to generate a collection of points at the center of each grid
 cell. This approach can be used without generating an $A$ matrix,
 but the matrix method improves efficiency.
  
-As an example, in R, you generate these points like so:
-````{tabbed} R
+As an example, suppose that you have a grid with a longitudinal (zonal)
+dimension from `longitude0` to `longitude1` and a latitudinal (meridional) dimension
+from `latitude0` to `latitude1`, with equal spacing of `gridwidth` for
+both dimensions. You can generate a full list of grid cell points like so:
+
+`````{tab-set}
+````{tab-item} R
 ```R
 longitudes <- seq(longitude0, longitude1, gridwidth)
 latitudes <- seq(latitude0, latitude1, gridwidth)
 pts <- expand.grid(x=longitudes, y=latitudes)
 ```
 ````
+
+````{tab-item} Python
+
+We use Python libraries `geopandas`, `pandas`, and `numpy` for spatial 
+analysis and data manipulation.
+
+```Python
+import numpy as np
+import pandas as pd
+
+longitudes = np.arange(longitude0, longitude1, gridwidth)
+latitudes = np.arange(latitude0, latitude1, gridwidth)
+pts = pd.DataFrame(np.array(np.meshgrid(longitudes, latitudes)).T.reshape(-1, 2), columns=['x', 'y'])
+```
+````
+`````
+ 
+Often you can get the longitude and latitude values for the grid cells
+directly from your weather dataset. In this case, replace the steps to
+generate `longitudes` and `latitudes` variables by hand with directly
+loading those values.
  
 Now, you can iterate through each region, and get a list of all of the
 points within each region. Here's how you would do that with the
 `PBSmapping` library in R:
-````{tabbed} R
+
+`````{tab-set}
+````{tab-item} R
 ```R
 events <- data.frame(EID=1:nrow(pts), X=pts$x, Y=pts$y)
 events <- as.EventData(events, projection=attributes(polys)$projection)
@@ -75,14 +105,26 @@ eids <- findPolys(events, polys, maxRows=6e5)
 ```
 ````
 
-Then you can use the cells that have been found (which, if you've set
-it upright, will be in the same order as the columns of $A$) to
-fill in the entries of your transformation matrix.
+````{tab-item} Python
+```Python
+import geopandas as gpd
+
+# Assuming polys is a GeoDataFrame with the regions
+points_gdf = gpd.GeoDataFrame(pts, geometry=gpd.points_from_xy(pts.x, pts.y))
+events_in_polys = gpd.sjoin(points_gdf, polys, how='inner', op='within')
+
+```
+````
+`````
+
+Then you can use the cells that have been found (which, if you've set it up right, will be in the same order as the columns of $A$) to fill in the entries of your transformation matrix.
  
 If your regions are not much bigger than the grid cells, you may get
 regions that do not contain any cell centers. In this case, you need
 to find whichever grid cell is closest. 
-````{tabbed} R
+
+`````{tab-set}
+````{tab-item} R
 For example, in R, using `PBSmapping`:
 ```R
 centroid <- calcCentroid(polys, rollup=1)
@@ -90,13 +132,29 @@ dists <- sqrt((pts$x - centroid$X)^2 + (pts$y - centroid$Y)^2)
 closest <- which.min(dists)[1]
 ```
 ````
+````{tab-item} Python
+```Python
+centroids = polys.centroid
+# For each centroid, find the closest point from pts
+closest_points = []
+
+for centroid in centroids:
+    dists = pts.apply(lambda row: centroid.distance(gpd.Point(row['x'], row['y'])), axis=1)
+    closest = dists.idxmin()
+    closest_points.append(pts.iloc[closest])
+
+# closest_points now contains the closest grid points to the centroids of the regions
+
+```
+````
+`````
  
 ## Approach 2. Allowing for partial grid cells
  
 Just using the grid cell centers can result in a poor representation
 of the weather that overlaps each region, particularly when the
 regions are of a similar size to the grid cells. In this case, you
-need to determine how much each grid cell overlaps with each region.
+need to determine how much each grid cell overlaps with each region (see {numref}`grid-cells-overlap`).
  
 There are different ways of doing this, but one is to use QGIS.
 Within QGIS, you can create a shapefile with a rectangle for each grid
@@ -104,7 +162,15 @@ cell. Then intersect those with the region shapefile, producing a
 separate polygon for each region-by-grid cell combination. Then have
 QGIS compute the area of each of those regions: these will give you
 the portion of grid cells to use.
- 
+
+
+```{figure} https://www.esri.com/arcgis-blog/wp-content/uploads/2019/06/pic4.png
+---
+name: grid-cells-overlap
+---
+See more [here](https://www.esri.com/arcgis-blog/products/spatial-analyst/analytics/getting-the-most-out-of-zonal-statistics/).
+```
+
 ## Matching geographical unit observations
  
 It is often necessary to match names within two datasets with geographical unit observations. For example, a country’s statistics ministry may report values by administrative unit, but to find out the actual spatial extent of those units, you may need to use the **GADM** shapefiles.

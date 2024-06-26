@@ -1,10 +1,49 @@
-# Hands-On Exercise, Step 1: Preparing the Weather Data
+# Hands-on exercise, step 1: preparing the weather data
+
+## Introduction
+
+The Hands-On Exercise is a simple, real-life example of climate
+econometrics. Our goal is to estimate a relationship between mortality
+and temperature, building on all of the advice from this tutorial. In
+the first three steps, we will prepare the combined weather and
+mortality dataset, while thinking about the right structure for the
+econometric model. The final step performs the regression and graphs
+the result.
+
+The potential for excess mortality driven by higher temperatures is
+one of the most significant risks of climate change. When we use the
+value of a stastical life (VSL) to monitize it, mortality can also be
+one of the most economically costly channels of climate risk.
+
+Several approaches are available to quantify this risk. Controlled
+experiments can help us understand the response of people to heat, but
+they lose the effect of real-life responses to heat (such as turning
+on air-conditioning). Causes of death can be used to identify
+heat-related impacts, but they may miss important indirect effects,
+such as a heat weakening the immune system. We analyze reported "all
+cause" mortality to get a full picture of the effects of temperature.
+
+One consequence of this choice is that the effects of extreme cold
+will also appear. In fact, in some areas, higher temperatures might
+result in fewer deaths as winters become more mild. We will need to
+estimate an econometric relationship that accounts for both of these
+effects.
+
+## Preparing to prepare the weather data
+
+This section will walk you through downloading and pre-processing an example dataset, the BEST data we mentioned in the [previous section](content:best-and-chirps). "Pre-processing" data is the process through which data is standardized into a format that's easy to interpret and use in your analysis. It generally includes adapting the data into filesystem and file formats that work for your project requirements and code workflows, and, crucially, quality control and verification. 
+
+We strongly recommend that you homogenize all your weather and climate data into the same filename and file structure system whenever possible. That way, any code you write will easily be generalizable to all the data you work with. Extra time spent pre-processing will therefore make your projects more robust and save you time later. In this section, we will save data in the CMIP format introduced in a [previous section](content:netcdf-org) on file organization (one file = one variable, coupled with a set of variable and filename conventions), which we believe works well for many common applications. 
+
+## Filesystem organization
+Please skim through the section on [code and data organization](content:code-organization) before beginning the hands-on exercise. 
+
+For the rest of this section, we will assume you are working from a directory structure similar to what is introduced there. Specifically, we assume you will have created a folder called `../data/climate_data/`, relative to your working directory, in which to store raw climate data. 
 
 ## Downloading the data 
 
 In our example, we will use Berkeley Earth (BEST) data. BEST data is
-available as national timeseries (area-weighted, so not usually useful
-even for studying national-level data) and as a 1-degree grid.
+available as national timeseries (which weight all _geographic_ areas equally in a country, and may therefore not be useful for studying even national-level data that implicitly describes properties of populations or crops that are unequally distributed over the country) and as a 1-degree grid. Working with BEST data requires extra pre-processing steps, which will allow us to illustrate some basic data processing across a few languages. Many data products will require less pre-processing, some will require more.  
 
 1. Go to the BEST archive, <http://berkeleyearth.org/archive/data/>
 2. Scroll down to the Gridded Data (ignore the Time Series Data which
@@ -14,7 +53,7 @@ even for studying national-level data) and as a 1-degree grid.
 4. Download the Average Temperature (TAVG) data in 1-degree gridded
    form for 1980 - 1989.
 5. Place this file (`Complete_TAVG_Daily_LatLong1_1980.nc`) in the
-   `data/climate_data` folder.
+   `sources/climate_data` folder.
 
 As a first pre-processing step, we will clip this file to the United
 States.
@@ -22,27 +61,34 @@ States.
 ## Loading the data
 
 First, let's load all of the data into memory. This code assumes that
-it (the code) is stored in a file (call it `preprocess_best.m` or
-`preprocess_best.py`) in a directory `code/`, a sister to the `data/`
+it (the code) is stored in a file (call it `preprocess_best.R`, `preprocess_best.m`, or
+`preprocess_best.py`) in your `code/` directory, a sister to the `sources/`
 directory.
 
-````{tabbed} R
+`````{tab-set}
+````{tab-item} R
 ```{code-block} R
 library(ncdf4)
 
 nc <- nc_open("../data/climate_data/Complete_TAVG_Daily_LatLong1_1980.nc")
 
+# Display header
+nc
+
 time <- seq(as.Date("1980-01-01"), length.out=nc$dim$time$len, by="1 day")
 ```
 ````
 
-````{tabbed} Python
+````{tab-item} Python
 ```{code-block} python
 import numpy as np
 import xarray as xr
 import datetime as dt
 
 ds = xr.open_dataset('../data/climate_data/Complete_TAVG_Daily_LatLong1_1980.nc')
+
+# Display header
+ds
 
 # Create time variable, which wasn't auto-generated from the netcdf 
 # due to BEST's ambiguous timing
@@ -51,16 +97,19 @@ ds['time'] = (
 ```
 ````
 
-````{tabbed} Matlab
+````{tab-item} Matlab
 ```{code-block} matlab
 data_dir = '../data/climate_data/';
 filename = 'Complete_TAVG_Daily_LatLong1_1980.nc';
+
+% Display header
+ncdisp([data_dir,filename])
 	   
 clim_tmp = ncread([data_dir,filename],'climatology');
 anom_tmp = ncread([data_dir,filename],'temperature');
 doy_tmp = ncread([data_dir,filename],'day_of_year');
 
-% Also loading the "months" variable - most datasets don't have it, but
+% Also loading the "months" variable - most datasets won't have this, but
 % it will make more sophisticated projecting methods easier. This is
 % particularly useful because of the gregorian calendar (which includes
 % leap days, and therefore would otherwise add an extra step to
@@ -68,6 +117,8 @@ doy_tmp = ncread([data_dir,filename],'day_of_year');
 months = ncread([data_dir,filename],'month');
 ```
 ````
+`````
+Note that we also printed the NetCDF file's [header](content:netcdf-header). This allows us to inspect the contents of the file and the variables. Note, for example, that the units of the variable `temperature` are $^\circ$C, not K as is often the case for weather data. 
 
 ## Constructing temperature levels
 
@@ -77,9 +128,12 @@ _anomaly_; the actual temperature is formed by adding it to the
 accounts for days 1:365 of the year, and ignores leap days (which the
 `temperature` variable does not). This section doubles the climatology
 for Feb 28th to also work on Feb 29th, and creates a `tas` variable
-that's the `climatology` + `temperature`.
+that's the `climatology` + `temperature`. (`tas` as a variable name 
+refers to "near-Surface Air Temperature", or temperature at
+some reference height, usually 2 meters above the surface.)
 
-````{tabbed} R
+`````{tab-set}
+````{tab-item} R
 ```{code-block} R
 doy <- ncvar_get(nc, 'day_of_year')
 tas.anom <- ncvar_get(nc, 'temperature')
@@ -90,7 +144,7 @@ tas <- tas.anom + tas.clim.all
 ```
 ````
 
-````{tabbed} Python
+````{tab-item} Python
 ```{code-block} python
 import calendar
 
@@ -115,7 +169,7 @@ ds = ds.drop(['temperature','climatology'])
 ```
 ````
 
-````{tabbed} Matlab
+````{tab-item} Matlab
 ```{code-block} matlab
 % BEST data is given in terms of anomalies from the underlying
 % climatology. So, the climatology has to be loaded first.
@@ -124,6 +178,7 @@ tas = anom_tmp + clim_tmp(:,:,doy_tmp);
 clear clim_tmp, anom_tmp, doy_tmp
 ```
 ````
+`````
 
 ## Subset it geographically
 
@@ -132,27 +187,28 @@ the process.
 
 Using the extreme points of the continental United States (see e.g., [here](https://en.wikipedia.org/wiki/List_of_extreme_points_of_the_United_States)) + 1 degree of wiggle room.
 
-````{tabbed} R
+`````{tab-set}
+````{tab-item} R
 ```{code-block} R
-longitude <- ncvar_get(nc, 'longitude')
-latitude <- ncvar_get(nc, 'latitude')
+lon <- ncvar_get(nc, 'longitude')
+lat <- ncvar_get(nc, 'latitude')
 
 latlims = c(23, 51)
 lonlims <- c(-126,-65)
 
-tas2 <- tas[longitude >= lonlims[1] & longitude <= lonlims[2], latitude >= latlims[1] & latitude <= latlims[2],]
+tas2 <- tas[lon >= lonlims[1] & lon <= lonlims[2], lat >= latlims[1] & lat <= latlims[2],]
 ```
 ````
 
-````{tabbed} Python
+````{tab-item} Python
 ```{code-block} python
-geo_lims = {'lat':[23,51],'lon':[-126,-65]}
+geo_lims = {'latitude':slice(23,51),'longitude':slice(-126,-65)}
 
-ds = ds.sel(latitude=slice(*geo_lims['lat']),longitude=slice(*geo_lims['lon'])).load()
+ds = ds.sel(**geo_lims).load()
 ```
 ````
 
-````{tabbed} Matlab
+````{tab-item} Matlab
 ```{code-block} matlab
 lat = ncread([data_dir,filename],'latitude');
 lon = ncread([data_dir,filename],'longitude');
@@ -166,43 +222,141 @@ lon = lon(lon_idxs);
 lat = lat(lat_idxs);
 ```
 ````
+`````
+
+## Verify the data
+This is a good moment to take a look at your data, to make sure it downloaded correctly and that your pre-processing code did what you expected it to. The simplest way to do so is to plot your data and inspect it visually. 
+
+From the section on [Basic Visualization of Climate and Weather Data](content:basic-visualization):
+
+`````{tab-set}
+````{tab-item} python
+Let's plot a time series of the closest grid cell to Los Angeles, CA:
+```{code-block} python
+ds.tas.sel(longitude=-118.2,latitude=34.1,method='nearest').plot()
+```
+Does the time series look reasonable (for example, do the temperatures match up with what you expect temperatures in LA to look like)? Are there any missing data? Is there a trend? 
+
+Let's also look at the seasonal cycle of temperature as well: 
+```{code-block} python
+# Plot the day-of-year average
+(ds.tas.sel(longitude=-118.2,latitude=34.1,method='nearest').
+ groupby('time.dayofyear').mean()).plot()
+```
+What can you say about the seasonality of your data? 
+
+Now, let's plot a map of the average summer temperature of our data: 
+```{code-block} python
+from cartopy import crs as ccrs
+from matplotlib import pyplot as plt
+
+# Create a geographic axis with the Albers Equal Area projection, a 
+# commonly-used projection for continental USA maps
+ax = plt.subplot(projection=ccrs.AlbersEqualArea(central_longitude=-96))
+
+# Get average summer temperatures, by using boolean subsetting to 
+# subset time to just the months June, July, and August, and then 
+# taking the average over all JJAs 
+ds_summer = ds.isel(time=(ds.time.dt.season=='JJA')).mean('time')
+
+# Plot contour map of summer temperatures, making sure to set the 
+# transform of the data itself (PlateCarree() tells the code to intepret
+# x values as longitude, y values as latitude, so it can transform 
+# the data to the AlbersEqualArea projection)
+ds_summer.tas.plot.contourf(transform=ccrs.PlateCarree(),levels=21) 
+
+# Add coastlines, for reference
+ax.coastlines()
+```
+Does the map look reasonable to you? For example, do you see temperatures change abruptly at the coasts? Did you subset the data correctly? Why do you think there are a few 'missing' pixels in the northern USA (remember, this dataset is land-only)? 
+````
+
+````{tab-item} Matlab
+Let's plot a time series of the closest grid cell to Los Angeles, CA:
+```{code-block} matlab
+% Find the closet lat / lon indices to LA
+[~,lat_idx] = min(abs(lat-34.1))
+[~,lon_idx] = min(abs(lon-(-118.2)))
+% Plot a time series of that grid cell
+plot(squeeze(tas(lon_idx,lat_idx,:)))
+```
+Does the time series look reasonable (for example, do the temperatures match up with what you expect temperatures in LA to look like)? Are there any missing data? Is there a trend? 
+
+Let's also look at the seasonal cycle of temperature as well: 
+```{code-block} matlab
+# Plot the first year of data
+plot(squeeze(tas(lon_idx,lat_idx,1:365)))
+```
+What can you say about the seasonality of your data? 
+
+Now, let's plot a map of the average temperature of our data: 
+```{code-block} matlab
+% Set an equal-area projection
+axesm('eckert4') 
+
+% Plot time-mean data 
+pcolorm(lat,lon,squeeze(mean(tas,3).'); shading flat 
+
+% Add coastlines
+coasts=matfile('coast.mat')
+geoshow(coasts.lat,coasts.long)
+```
+Does the map look reasonable to you? For example, do you see temperatures change abruptly at the coasts? Did you subset the data correctly? 
+
+````
+`````
 
 ## Save the result
 
 We will write out the clipped, concatenated data to a single file for
 future processing. We make some changes in the process to conform to
-the standards used in CMIP5 datasets.
+the CMIP file system standards, for ease of future processing.
 
-````{tabbed} R
+`````{tab-set}
+````{tab-item} R
 ```{code-block} R
-dimlon <- ncdim_def("lon", "degrees_east", longitude[longitude >= lonlims[1] & longitude <= lonlims[2]], longname='longitude')
-dimlat <- ncdim_def("lat", "degrees_north", latitude[latitude >= latlims[1] & latitude <= latlims[2]], longname='latitude')
+# Set output filename of your pre-processed file
+output_fn <- "../data/climate_data/tas_day_BEST_historical_station_19800101-19891231.nc"
+
+# Define dimensions
+dimlon <- ncdim_def("lon", "degrees_east", lon[lon >= lonlims[1] & lon <= lonlims[2]], longname='longitude')
+dimlat <- ncdim_def("lat", "degrees_north", lat[lat >= latlims[1] & lat <= latlims[2]], longname='latitude')
 dimtime <- ncdim_def("time", "days since 1980-01-01 00:00:00", as.numeric(time - as.Date("1980-01-01")),
                      unlim=T, calendar="proleptic_gregorian")
+
+# Define variable with the dimensions listed above
 vartas <- ncvar_def("tas", "C", list(dimlon, dimlat, dimtime), NA, longname="temperature")
 
-ncnew <- nc_create("tas_day_BEST_historical_station_19800101-19891231.nc", vartas)
+# Create netcdf vile
+ncnew <- nc_create(output_fn, vartas)
+# Add the variable data
 ncvar_put(ncnew, vartas, tas2)
+
+# Close file
 nc_close(ncnew)
 ```
 ````
 
-````{tabbed} Python
+````{tab-item} Python
 ```{code-block} python
+# Set output filename of your pre-processed file
 output_fn = '../data/climate_data/tas_day_BEST_historical_station_19800101-19891231.nc'
 
+# Add an attribute mentioning how this file was created
+# This is good practice, especially for NetCDF files, 
+# whose metadata can help you keep track of your workflow. 
 ds.attrs['origin_script']='preprocess_best.py'
 
-# Rename to lat/lon to fit CMIP5 defaults
+# Rename to lat/lon to fit CMIP defaults
 ds = ds.rename({'latitude':'lat','longitude':'lon'})
 
 ds.to_netcdf(output_fn)
 ```
 ````
 
-````{tabbed} Matlab
+````{tab-item} Matlab
 ```{code-block} matlab
-% Set output filename
+% Set output filename of your pre-processed file
 fn_out = '../data/climate_data/tas_day_BEST_historical_station_19800101-19891231.nc';
 
 % Write temperature data to netcdf 
@@ -239,7 +393,13 @@ ncwriteatt(fn_out,'month','units','month number')
 ncwriteatt(fn_out,'/','variable','tas')
 ncwriteatt(fn_out,'/','variable_long','near-surface air temperature')
 ncwriteatt(fn_out,'/','source','Berkeley Earth Surface Temperature Project')
-ncwriteatt(fn_out,'/','origin_script','preprocess_best.m')
 ncwriteatt(fn_out,'/','calendar','gregorian')
+
+% Add an attribute mentioning how this file was created
+% This is good practice, especially for NetCDF files, 
+% whose metadata can help you keep track of your workflow. 
+ncwriteatt(fn_out,'/','origin_script','preprocess_best.m')
 ```
 ````
+`````
+Now you can start working with the downloaded data! We'll come back to using this file in [Step 3](content:hands-on3) of the Hands-On Exercise. 
